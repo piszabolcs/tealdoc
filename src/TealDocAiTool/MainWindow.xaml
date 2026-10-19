@@ -1,0 +1,492 @@
+<Window x:Class="TealDocAiTool.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        xmlns:common="clr-namespace:TealDocAiTool.Common"
+        Style="{StaticResource AppWindow}"
+        Title="TealDoc" Height="940" Width="1180" MinHeight="640" MinWidth="980"
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/App.ico"
+        AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
+
+    <shell:WindowChrome.WindowChrome>
+        <!-- A CaptionHeight a saját címsávunkkal egyezik, így a húzást, a dupla kattintásos
+             maximalizálást, a Snap-et és a rendszermenüt továbbra is a Windows kezeli. -->
+        <shell:WindowChrome CaptionHeight="38" ResizeBorderThickness="6"
+                            GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <!-- Maximalizált állapotban a WindowChrome túllógatja az ablakot a képernyőn; a margó kompenzálja. -->
+    <Border x:Name="RootBorder" Background="{StaticResource BgDarkBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ===================== CÍMSOR ===================== -->
+            <Border Grid.Row="0" Background="{StaticResource BgPanelBrush}" Height="38">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <Image Source="Assets/Logo_icon.png" Width="18" Height="18" Margin="0,0,9,0"/>
+                        <TextBlock Text="TealDoc" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button x:Name="BtnMinimize" Style="{StaticResource CaptionButton}" Content="&#xE921;"
+                                ToolTip="Kis méret" AutomationProperties.Name="Kis méret" Click="BtnMinimize_Click"/>
+                        <Button x:Name="BtnMaximize" Style="{StaticResource CaptionButton}" Content="&#xE922;"
+                                ToolTip="Teljes méret" AutomationProperties.Name="Teljes méret" Click="BtnMaximize_Click"/>
+                        <Button x:Name="BtnClose" Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;"
+                                ToolTip="Bezárás" AutomationProperties.Name="Bezárás" Click="BtnClose_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+    <Grid Grid.Row="1" Margin="16,16,16,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===================== FEJLÉC ===================== -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <Image Source="Assets/Logo_nobg.png" Height="36" Margin="0,0,10,0" VerticalAlignment="Center"/>
+            <TextBlock Text="tartalom alapú fájlátnevezés + mappa-index, helyi LLM-mel" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- ===================== FÜLEK ===================== -->
+        <TabControl x:Name="Tabs" Grid.Row="1" Background="Transparent" BorderThickness="0">
+
+        <!-- ===================== ÁTNEVEZÉS FÜL ===================== -->
+        <TabItem Header="Átnevezés">
+        <!-- Görgethető lap: amíg az ablak elég magas, a lap a látható magasságot tölti ki (a napló
+             nyúlik); kisebb ablakban a lap a természetes minimális magasságán marad, és görgethető —
+             így 980×640-en sem kerül gomb az ablakon kívülre. A MinHeight-ot a code-behind méri. -->
+        <ScrollViewer x:Name="RenameScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"
+                      common:ScrollFade.IsEnabled="True">
+        <Border x:Name="RenamePage" Padding="0,8,0,0"
+                Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="320"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- BAL OLDAL: vezérlés + napló -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Mappák -->
+                <Border Grid.Row="0" Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="MAPPÁK" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Text="Célmappa (amit átnevezzen) — vagy húzz egy fájlt az ablakra a gyors, egyfájlos javaslathoz:" Style="{StaticResource SubtleText}" Margin="0,0,0,4" TextTrimming="CharacterEllipsis"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="TxtTarget" AutomationProperties.Name="Célmappa" Grid.Column="0"/>
+                            <Button x:Name="BtnPickTarget" Grid.Column="2" Content="Tallózás…" Style="{StaticResource GhostButton}" Click="BtnPickTarget_Click"/>
+                        </Grid>
+                        <TextBlock Text="Napló mappa (átnevezési napló + Visszavonás ide kerül):" Style="{StaticResource SubtleText}" Margin="0,0,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="TxtLogDir" AutomationProperties.Name="Napló mappa" Grid.Column="0"/>
+                            <Button x:Name="BtnPickLogDir" Grid.Column="2" Content="Tallózás…" Style="{StaticResource GhostButton}" Click="BtnPickLogDir_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Beállítások -->
+                <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="BEÁLLÍTÁSOK" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Ollama cím" Style="{StaticResource SubtleText}"/>
+                                <TextBox x:Name="TxtOllamaHost" AutomationProperties.Name="Ollama cím" Text="http://localhost:11434"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Modell" Style="{StaticResource SubtleText}"/>
+                                <TextBox x:Name="TxtOllamaModel" AutomationProperties.Name="Modell" Text="qwen3:8b"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4" MinWidth="90">
+                                <TextBlock Text="Párhuzamos" Style="{StaticResource SubtleText}"/>
+                                <TextBox x:Name="TxtWorkers" AutomationProperties.Name="Párhuzamos feldolgozás" Text="6"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="6" MinWidth="90">
+                                <TextBlock Text="Időkorlát (s)" Style="{StaticResource SubtleText}"/>
+                                <TextBox x:Name="TxtTimeout" AutomationProperties.Name="Időkorlát másodpercben" Text="60"
+                                         ToolTip="Egy LLM-hívás legfeljebb ennyi másodpercig tarthat. Három egymás utáni időtúllépés után a futás az LLM nélkül folytatódik."/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <CheckBox x:Name="ChkRecursive" Content="Almappák is (rekurzív)" IsChecked="True" Margin="0,0,20,0"/>
+                            <CheckBox x:Name="ChkDryRun" Content="Csak előnézet (nem nevez át, csak naplóz)" IsChecked="True"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Gombok + állapot -->
+                <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnStart" Content="▶  Indítás" Style="{StaticResource TealButton}" Click="BtnStart_Click" MinWidth="120"/>
+                            <Button x:Name="BtnStop" Content="■  Leállítás" Style="{StaticResource GhostButton}" Click="BtnStop_Click" Margin="10,0,0,0" IsEnabled="False"/>
+                            <Button x:Name="BtnUndo" Content="↺  Visszavonás" Style="{StaticResource DangerButton}" Click="BtnUndo_Click" Margin="10,0,0,0"/>
+                            <Border Background="{StaticResource BgCardBrush}" CornerRadius="6" Padding="10,6" Margin="20,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="LlmStatusText" Text="Heurisztika" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <ProgressBar x:Name="Progress" Margin="0,14,0,6"/>
+                        <TextBlock x:Name="TxtStatus" Text="Készen áll." Style="{StaticResource SubtleText}"/>
+                        <TextBlock x:Name="TxtCounts" Text="" Style="{StaticResource SubtleText}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Napló -->
+                <TextBlock Grid.Row="3" Text="NAPLÓ" Style="{StaticResource SectionHeader}" Margin="4,0,0,4"/>
+                <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" MinHeight="120">
+                    <TextBox x:Name="TxtLog" AutomationProperties.Name="Napló" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                             FontFamily="Consolas" FontSize="11.5" TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                             Padding="10" common:ScrollFade.IsEnabled="True"/>
+                </Border>
+            </Grid>
+
+            <!-- JOBB OLDAL: hardver-telemetria -->
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="HARDVER" Style="{StaticResource SectionHeader}"/>
+
+                    <TextBlock Text="CPU" Style="{StaticResource SubtleText}" Margin="0,4,0,2"/>
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtCpuPct" Grid.Column="0" Text="0 %" FontSize="20" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtCpuTemp" Grid.Column="1" Text="-- °C" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Bottom"/>
+                    </Grid>
+                    <lvc:CartesianChart x:Name="CpuChart" Height="70" Margin="0,0,0,14" Background="Transparent"/>
+
+                    <TextBlock Text="GPU" Style="{StaticResource SubtleText}" Margin="0,0,0,2"/>
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtGpuPct" Grid.Column="0" Text="0 %" FontSize="20" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtGpuTemp" Grid.Column="1" Text="-- °C" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Bottom"/>
+                    </Grid>
+                    <lvc:CartesianChart x:Name="GpuChart" Height="70" Margin="0,0,0,10" Background="Transparent"/>
+                    <TextBlock x:Name="TxtGpuName" Text="" Style="{StaticResource SubtleText}"/>
+                    <TextBlock x:Name="TxtVram" Text="" Style="{StaticResource SubtleText}" Margin="0,2,0,0"/>
+
+                    <Separator Margin="0,14,0,10" Background="{StaticResource BorderBrush2}"/>
+
+                    <TextBlock Text="OLLAMA" Style="{StaticResource SubtleText}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <Ellipse x:Name="OllamaDot" Width="9" Height="9" Fill="{StaticResource TextSecondaryBrush}" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TxtOllamaStatus" Text="ellenőrzés…" FontSize="12"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="TxtElevated" Text="" Style="{StaticResource SubtleText}" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+        </Border>
+        </ScrollViewer>
+        </TabItem>
+
+        <!-- ===================== MAPPA-INDEX FÜL ===================== -->
+        <TabItem Header="Mappa-index">
+        <!-- Görgethető lap: amíg az ablak elég magas, a lap a látható magasságot tölti ki (a napló
+             nyúlik); kisebb ablakban a lap a természetes minimális magasságán marad, és görgethető —
+             így 980×640-en sem kerül gomb az ablakon kívülre. A MinHeight-ot a code-behind méri. -->
+        <ScrollViewer x:Name="IndexScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"
+                      common:ScrollFade.IsEnabled="True">
+        <Border x:Name="IndexPage" Padding="0,8,0,0"
+                Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Kimeneti mód + mappák -->
+            <Border Grid.Row="0" Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="KIMENETI MÓD" Style="{StaticResource SectionHeader}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <!-- A DOCX az ALAPÉRTELMEZETT: sok dokumentum-kereső és tudásbázis a szokásos
+                             irodai formátumokat olvassa, a Markdownt nem. -->
+                        <RadioButton x:Name="RbModeWord" Content="DOCX-kártyák (egységenként 1 .docx)" IsChecked="True" GroupName="OutMode" Margin="0,0,20,0" Checked="RbMode_Changed"
+                                     ToolTip="Egységenként egy Word-dokumentum egyetlen mappába. A legtöbb dokumentum-kereső és tudásbázis ezt olvassa."/>
+                        <RadioButton x:Name="RbModeMarkdown" Content="Markdown (egységenként 1 .md)" GroupName="OutMode" Margin="0,0,20,0" Checked="RbMode_Changed"
+                                     ToolTip="Egységenként egy Markdown-fájl — pl. wikihez vagy egy LLM-tudásbázis közvetlen feltöltéséhez."/>
+                        <RadioButton x:Name="RbModeCsv" Content="CSV-táblázat (1 fájl)" GroupName="OutMode" Checked="RbMode_Changed"/>
+                    </StackPanel>
+
+                    <!-- Egysoros útvonal-sorok: a címke a mező BAL oldalán, a hosszú magyarázat
+                         tooltipben — így marad függőleges hely a naplónak. -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Gyökérmappa:" Style="{StaticResource SubtleText}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   ToolTip="Ez alatt minden almappa egy egység (gép, berendezés, gyártósor), pl. 0101 DEMO ESZTERGA CX-200"/>
+                        <TextBox x:Name="TxtIdxRoot" AutomationProperties.Name="Gyökérmappa" Grid.Column="2"
+                                 ToolTip="Ez alatt minden almappa egy egység (gép, berendezés, gyártósor), pl. 0101 DEMO ESZTERGA CX-200"/>
+                        <Button x:Name="BtnIdxPickRoot" Grid.Column="4" Content="Tallózás…" Style="{StaticResource GhostButton}" Click="BtnIdxPickRoot_Click"/>
+                    </Grid>
+
+                    <!-- Opcionális hivatkozás-alap: a gyökérnek MEGFELELŐ webes mappa címe (pl. SharePoint).
+                         Enélkül a kimenetbe csak a gyökérhez képesti mappanév kerül. -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Hivatkozás-alap URL:" Style="{StaticResource SubtleText}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   ToolTip="Opcionális. A fenti gyökérmappának megfelelő webes mappa címe, pl. egy SharePoint-dokumentumtárban a böngésző CÍMSORÁBÓL másolva (az …/Forms/AllItems.aspx?id=… alak is jó). A Megosztás gombbal másolt link nem használható, mert abból a fájlok címe nem állítható elő. Üresen hagyva a kimenetbe csak a gyökérhez képesti mappanév kerül."/>
+                        <TextBox x:Name="TxtIdxSharePointUrl" AutomationProperties.Name="Hivatkozás-alap URL" Grid.Column="2"
+                                 ToolTip="Opcionális. A fenti gyökérmappának megfelelő webes mappa címe, pl. egy SharePoint-dokumentumtárban a böngésző CÍMSORÁBÓL másolva (az …/Forms/AllItems.aspx?id=… alak is jó). A Megosztás gombbal másolt link nem használható, mert abból a fájlok címe nem állítható elő. Üresen hagyva a kimenetbe csak a gyökérhez képesti mappanév kerül."/>
+                    </Grid>
+
+                    <!-- DOCX / Markdown mód: kimeneti mappa -->
+                    <Grid x:Name="PanelFolderOut" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Kimeneti mappa:" Style="{StaticResource SubtleText}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   ToolTip="Ide kerülnek az egységenkénti .docx / .md fájlok"/>
+                        <TextBox x:Name="TxtIdxOutFolder" AutomationProperties.Name="Kimeneti mappa" Grid.Column="2"
+                                 ToolTip="Ide kerülnek az egységenkénti .docx / .md fájlok"/>
+                        <Button x:Name="BtnIdxPickOutFolder" Grid.Column="4" Content="Tallózás…" Style="{StaticResource GhostButton}" Click="BtnIdxPickOutFolder_Click"/>
+                    </Grid>
+
+                    <!-- CSV mód: kimeneti fájl -->
+                    <Grid x:Name="PanelCsvOut" Visibility="Collapsed" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Kimeneti CSV fájl:" Style="{StaticResource SubtleText}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   ToolTip="Egyetlen CSV-táblázat (UTF-8, Excelben és adatbázis-importhoz is)"/>
+                        <TextBox x:Name="TxtIdxCsv" AutomationProperties.Name="Kimeneti CSV fájl" Grid.Column="2" ToolTip="Egyetlen CSV-táblázat (UTF-8, Excelben és adatbázis-importhoz is)"/>
+                        <Button x:Name="BtnIdxPickCsv" Grid.Column="4" Content="Tallózás…" Style="{StaticResource GhostButton}" Click="BtnIdxPickCsv_Click"/>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Gyorsítótár mappa:" Style="{StaticResource SubtleText}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   ToolTip="Folytathatóság — a kész gépeket egy megszakadt futás nem generálja újra"/>
+                        <TextBox x:Name="TxtIdxCache" AutomationProperties.Name="Gyorsítótár mappa" Grid.Column="2"
+                                 ToolTip="Folytathatóság — a kész gépeket egy megszakadt futás nem generálja újra"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Beállítások -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="BEÁLLÍTÁSOK" Style="{StaticResource SectionHeader}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Ollama cím" Style="{StaticResource SubtleText}"/>
+                            <TextBox x:Name="TxtIdxOllamaHost" AutomationProperties.Name="Ollama cím (Mappa-index)" Text="http://localhost:11434"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Modell" Style="{StaticResource SubtleText}"/>
+                            <!-- 30b, nem 8b: a 8b futásonként MÁS géptípust talált ki ugyanarra a
+                                 gépre (Présgép / Centrifugális prés / Presszínű gép), a 30b viszont
+                                 stabilan helyeset adott. Lassabb (~46 s/hívás), de a rossz géptípus
+                                 megmérgezi a keresőindexet. -->
+                            <TextBox x:Name="TxtIdxOllamaModel" AutomationProperties.Name="Modell (Mappa-index)" Text="qwen3:30b-a3b-q4_K_M"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="4" MinWidth="90">
+                            <TextBlock Text="Párhuzamos" Style="{StaticResource SubtleText}"/>
+                            <TextBox x:Name="TxtIdxWorkers" AutomationProperties.Name="Párhuzamos feldolgozás (Mappa-index)" Text="4"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="6" MinWidth="90">
+                            <TextBlock Text="Időkorlát (s)" Style="{StaticResource SubtleText}"/>
+                            <TextBox x:Name="TxtIdxTimeout" AutomationProperties.Name="Időkorlát másodpercben (Mappa-index)" Text="120"
+                                     ToolTip="Egy LLM-hívás legfeljebb ennyi másodpercig tarthat. Időtúllépésnél a gép hiányos lesz (a következő futás pótolja); három egymás utáni időtúllépés leállítja a futást."/>
+                        </StackPanel>
+                    </Grid>
+                    <!-- Egy tördelő sor: széles ablakban egy sorban fér el, keskenyben tördel. -->
+                    <WrapPanel Margin="0,10,0,0">
+                        <CheckBox x:Name="ChkIdxMachineType" Content="Típus megállapítása LLM-mel" IsChecked="True"
+                                  VerticalAlignment="Center" Margin="0,0,20,6"/>
+                        <CheckBox x:Name="ChkIdxFileSummaries" Content="Fájlonkénti leírás generálása (részletes, de lassú)" IsChecked="True"
+                                  VerticalAlignment="Center" Margin="0,0,20,6"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,6">
+                            <TextBlock Text="Max. leírt fájl / gép (0 = mind):" Style="{StaticResource SubtleText}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="TxtIdxMaxFiles" AutomationProperties.Name="Leírt fájlok legnagyobb száma egységenként" Text="0" Width="70"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkIdxLinkDocs" Content="Minden dokumentum kapjon hivatkozást" IsChecked="True"
+                                  VerticalAlignment="Center" Margin="0,0,0,6"
+                                  ToolTip="Csak akkor működik, ha a hivatkozás-alap URL ki van töltve. Kikapcsolva csak a mappára mutat hivatkozás, a fájlok puszta névvel szerepelnek — ez rövidebb kimenetet ad, ami a szemantikus keresésnek kedvezhet."/>
+                    </WrapPanel>
+
+                    <!-- A típus-támpont: a felhasználó tudja, mit tartalmaz a gyökér — mi nem
+                         találgatunk a mappanévből (egy vegyes gyűjtőnévből hallucinációt okozott). -->
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Típus-támpont (üresen hagyható):" Style="{StaticResource SubtleText}"
+                                   VerticalAlignment="Center"
+                                   ToolTip="Csak akkor töltsd ki, ha a gyökér alatt EGYFAJTA egység van — pl. csupa esztergagépnél: CNC esztergagép. Vegyes gyűjteménynél (sorok és gépek együtt) HAGYD ÜRESEN, mert a téves támpontból a modell rossz típust talál ki."/>
+                        <TextBox x:Name="TxtIdxCategoryHint" AutomationProperties.Name="Típus-támpont" Grid.Column="2"
+                                 ToolTip="Csak akkor töltsd ki, ha a gyökér alatt EGYFAJTA egység van — pl. csupa esztergagépnél: CNC esztergagép. Vegyes gyűjteménynél (sorok és gépek együtt) HAGYD ÜRESEN, mert a téves támpontból a modell rossz típust talál ki."/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Gombok + állapot -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnIdxStart" Content="▶  Index indítása" Style="{StaticResource TealButton}" Click="BtnIdxStart_Click" MinWidth="150"/>
+                        <Button x:Name="BtnIdxStop" Content="■  Leállítás" Style="{StaticResource GhostButton}" Click="BtnIdxStop_Click" Margin="10,0,0,0" IsEnabled="False"/>
+                    </StackPanel>
+                    <ProgressBar x:Name="IdxProgress" Margin="0,14,0,6"/>
+                    <TextBlock x:Name="TxtIdxStatus" Text="Készen áll." Style="{StaticResource SubtleText}"/>
+                    <TextBlock x:Name="TxtIdxCounts" Text="" Style="{StaticResource SubtleText}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Napló — MinHeight, hogy kis ablaknál se tűnjön el teljesen. -->
+            <TextBlock Grid.Row="3" Text="NAPLÓ" Style="{StaticResource SectionHeader}" Margin="4,0,0,4"/>
+            <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" MinHeight="96">
+                <TextBox x:Name="TxtIdxLog" AutomationProperties.Name="Mappa-index napló" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                         FontFamily="Consolas" FontSize="11.5" TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         Padding="10" common:ScrollFade.IsEnabled="True"/>
+            </Border>
+        </Grid>
+        </Border>
+        </ScrollViewer>
+        </TabItem>
+
+        </TabControl>
+    </Grid>
+            <!-- ===================== LÁBLÉC: szerzői névjegy ===================== -->
+            <!-- Kicsi, halvány, keret nélküli felirat; rámutatásra és billentyűfókuszra a téma
+                 akcentszínével ragyog, kattintásra a névjegy nyílik meg (X / Esc / kattintás kívülre zárja). -->
+            <Grid Grid.Row="2" Margin="16,0,16,3">
+                <Button x:Name="BtnSignature" Style="{StaticResource SignatureButton}" HorizontalAlignment="Right"
+                        Click="BtnSignature_Click" ToolTip="Névjegy" AutomationProperties.Name="Névjegy">
+                    <TextBlock x:Name="SignatureText" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}">
+                        <TextBlock.Effect>
+                            <DropShadowEffect x:Name="SignatureGlow" Color="{StaticResource TealColor}"
+                                              BlurRadius="12" ShadowDepth="0" Opacity="0"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </Button>
+
+                <Popup x:Name="AboutPopup" Placement="Center" PlacementTarget="{Binding ElementName=RootBorder}"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="{StaticResource BgPanelBrush}" BorderBrush="{StaticResource TealDarkBrush}"
+                            BorderThickness="1" CornerRadius="10" Padding="20,14,20,18" Width="460">
+                        <StackPanel>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="TealDoc" FontSize="17" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="AboutVersion" FontSize="12.5" Margin="10,0,0,2"
+                                               VerticalAlignment="Bottom" Foreground="{StaticResource TealBrush}"/>
+                                </StackPanel>
+                                <Button x:Name="BtnAboutClose" Style="{StaticResource SignatureButton}" HorizontalAlignment="Right"
+                                        Click="BtnAboutClose_Click" ToolTip="Bezárás (Esc)" AutomationProperties.Name="Névjegy bezárása">
+                                    <TextBlock Text="✕" FontSize="13" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Button>
+                            </Grid>
+                            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Text="Dokumentumokat nevez át a tartalmuk alapján, és mappákból kereshető indexet készít — helyi LLM-mel (Ollama), naplózva és visszavonhatóan."/>
+                            <TextBlock Text="ARCHITEKTÚRA" Style="{StaticResource SectionHeader}" Margin="0,14,0,4"/>
+                            <TextBlock Style="{StaticResource SubtleText}" TextWrapping="Wrap"
+                                       Text="WPF felület → motor (heurisztika, címvalidátor, write-ahead napló és visszavonás, mappa-index) → szövegkinyerők (PdfPig, NPOI, Word COM) → helyi Ollama HTTP API"/>
+                            <TextBlock Text="KÉSZÜLT" Style="{StaticResource SectionHeader}" Margin="0,12,0,4"/>
+                            <TextBlock Style="{StaticResource SubtleText}" TextWrapping="Wrap"
+                                       Text="C# · .NET 10 · WPF · PdfPig · NPOI · LiveCharts2 · LibreHardwareMonitor"/>
+                            <TextBlock Text="REPÓK" Style="{StaticResource SectionHeader}" Margin="0,12,0,4"/>
+                            <TextBlock Style="{StaticResource SubtleText}" TextWrapping="Wrap"
+                                       Text="github.com/piszabolcs/TealDoc · UglyToad/PdfPig · nissl-lab/npoi · beto-rodriguez/LiveCharts2 · LibreHardwareMonitor/LibreHardwareMonitor · ollama/ollama"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
+
